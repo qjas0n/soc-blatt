@@ -326,7 +326,7 @@ export async function startExam(formData: FormData) {
     revalidatePath('/ausbildungen');
     revalidatePath('/ausbildungen/pruefungen');
 
-    redirect(`/ausbildungen/pruefungen/${examId}/durchfuehren`);
+    return { success: true, examId };
 }
 
 export async function updateExamAnswer(examId: number, answerId: number, punkte: number) {
@@ -399,7 +399,7 @@ export async function finishExam(formData: FormData) {
     revalidatePath('/ausbildungen/pruefungen');
     revalidatePath(`/ausbildungen/pruefungen/${examId}`);
 
-    redirect(`/ausbildungen/pruefungen/${examId}`);
+    return { success: true, examId };
 }
 
 export async function getOngoingExams() {

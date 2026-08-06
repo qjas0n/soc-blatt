@@ -1,18 +1,29 @@
 "use client";
 
 import React, { useState } from 'react';
-import { ClipboardCheck, CheckCircle2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ClipboardCheck, CheckCircle2, AlertCircle } from 'lucide-react';
 import { finishExam } from '@/app/actions';
 
 export default function FinishExamCard({ examId, suggestedStatus, memberNames = [] }: {
     examId: number; suggestedStatus: 'bestanden' | 'nicht_bestanden'; memberNames?: string[];
 }) {
     const [finishing, setFinishing] = useState(false);
+    const [error, setError] = useState('');
+    const router = useRouter();
 
     const handleFinish = async (formData: FormData) => {
         setFinishing(true);
-        await finishExam(formData);
-        setFinishing(false);
+        setError('');
+        const result = await finishExam(formData);
+        if (result?.error) {
+            setError(result.error);
+            setFinishing(false);
+            return;
+        }
+        if (result?.success) {
+            router.push(`/ausbildungen/pruefungen/${result.examId}`);
+        }
     };
 
     return (
@@ -22,6 +33,16 @@ export default function FinishExamCard({ examId, suggestedStatus, memberNames = 
                 <ClipboardCheck size={16} className="icon" />
             </div>
             <div className="card-content">
+                {error && (
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px',
+                        padding: '10px 14px', borderRadius: 'var(--radius-sm)',
+                        background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                        fontSize: '13px', color: 'var(--color-red)'
+                    }}>
+                        <AlertCircle size={15} /> {error}
+                    </div>
+                )}
                 <div style={{
                     display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px',
                     padding: '10px 14px', borderRadius: 'var(--radius-sm)',

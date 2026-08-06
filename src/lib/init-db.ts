@@ -255,6 +255,7 @@ export async function initDb() {
 
     await seedTrainings();
     await seedSchiessenCriteria();
+    await seedFahrenDienstFragen();
     await seedDienstvorschriften();
   } catch (error) {
     console.error('Failed to initialize tables:', error);
@@ -452,6 +453,78 @@ async function seedSchiessenCriteria() {
   }
 
   console.log('Bewertungskriterien für "Schießen – Praxis" angelegt.');
+}
+
+// Zusätzliche Theoriefragen (Kategorie "Dienst") für "Fahren – Theorie – Ortskunde" —
+// ergänzt den bestehenden Fragenkatalog, ohne die ursprünglichen 12 Fragen anzutasten.
+async function seedFahrenDienstFragen() {
+  const rows: any = await query("SELECT id FROM soc_trainings WHERE slug = 'fahren-theorie-ortskunde'");
+  if (!rows || rows.length === 0) return;
+  const trainingId = rows[0].id;
+
+  const existing: any = await query("SELECT COUNT(*) as c FROM soc_training_questions WHERE training_id = ? AND kategorie = 'Dienst'", [trainingId]);
+  if (existing[0].c > 0) return;
+
+  const fragen: [string, string][] = [
+    ['Was tust du bei einem 11-99?', 'SAHP einbesetzen und mich in den Einsatz eintragen.'],
+    ['Wie ist dein Vorgehen wenn eine Staatsbank gemeldet wird?', 'SAHP einbesetzen, in den Einsatz eintragen und EL/VF abklären.'],
+    ['Wann darf aus einem Fahrzeug geschossen werden?', 'Wenn Rang 7+ die Schussfreigabe erteilt.'],
+    ['Wann sollte man einen 11-99 Einsatz machen?', 'Bei hohem Risiko oder hoher Bedrohungslage.'],
+    ['Was ist der Unterschied zwischen einem 11-90 und einem 11-99?', '11-90 = Officer in Bedrängnis, 11-99 = Officer unter Beschuss.'],
+    ['Wodurch darf die Dienstfähigkeit nicht beeinträchtigt sein?', 'Alkohol, Drogen oder schwere Medikamente.'],
+    ['Wann beginnt die reguläre Dienstpflicht?', 'Um 16:00 Uhr.'],
+    ['Wann endet die reguläre Dienstpflicht?', 'Um 23:59 Uhr.'],
+    ['Wann müssen sich alle Beamten unabhängig von der Uhrzeit in den Dienst begeben?', 'Bei Defcon 1 oder 2.'],
+    ['Wer kann Beamte zwischen 16:00 und 23:59 Uhr in den Dienst rufen?', 'Ein Beamter Rang 8 oder höher.'],
+    ['Wie musst du im Dienst erreichbar sein?', 'Per Funk und Telefon.'],
+    ['Wie musst du außerhalb des Dienstes zwischen 16:00 und 23:59 Uhr erreichbar sein?', 'Telefonisch.'],
+    ['Was musst du im Dienst immer tragen?', 'Dienstkleidung und vorgeschriebene Bewaffnung.'],
+    ['Woran muss die Ausrüstung angepasst werden?', 'Dienstgrad und Gefahrenlage.'],
+    ['Welche Kurzwaffe gehört zur Pflichtausrüstung?', 'Heavy Pistol.'],
+    ['Wie viele Magazine für die Heavy Pistol musst du mitführen?', 'Mindestens 10.'],
+    ['Wie viele Magazine für die SMG musst du mitführen?', 'Mindestens 12.'],
+    ['Wie viele Magazine für die Langwaffe musst du mitführen?', 'Mindestens 25.'],
+    ['Wie viele Flare-Magazine musst du mitführen?', 'Mindestens 10.'],
+    ['Wie viele Verbandskits musst du mitführen?', 'Mindestens 7, maximal 10.'],
+    ['Wie viele Westen musst du mindestens mitführen?', 'Mindestens 7.'],
+    ['Dürfen nicht freigegebene Ausrüstungsgegenstände genutzt werden?', 'Nein.'],
+    ['Wann dürfen Dienstwaffen offen getragen werden?', 'Wenn die Lage es erfordert oder angeordnet wird.'],
+    ['Was passiert mit der Dienstausrüstung nach Dienstende?', 'Sie wird im Spind verstaut.'],
+    ['Dürfen Dienstwaffen außer Dienst mitgeführt werden?', 'Nein.'],
+    ['Wie viele Nagelbänder dürfen regulär mitgeführt werden?', 'Zwei.'],
+    ['Wie viele Pfeilabsperrungen dürfen regulär mitgeführt werden?', 'Zwei.'],
+    ['Wie viele Werkzeugkästen dürfen regulär mitgeführt werden?', 'Einer.'],
+    ['Wer darf zusätzliche Ausrüstung genehmigen?', 'Rang 8+ oder die Einsatzleitung.'],
+    ['Ab welchem Rang darf ein Fingerabdrucksensor genutzt werden?', 'Ab Rang 3.'],
+    ['Ab welchem Rang ist ein Nagelband Pflicht?', 'Ab Rang 5.'],
+    ['Ab welchem Rang darf ein Störsender genutzt werden?', 'Ab Rang 9.'],
+    ['Was ist der erste Schritt der Beschwerdekette?', 'Klärendes Gespräch.'],
+    ['Wohin geht eine Beschwerde nach dem Gespräch?', 'An das Detective Bureau.'],
+    ['Wer wird bei Hochverrat sofort informiert?', 'Die Behördenleitung.'],
+    ['Wer darf eigene Blitzer bezahlen?', 'Jeder Beamte.'],
+    ['Ab welcher Geschwindigkeit wird der Führerschein entzogen?', 'Ab 100 km/h unter Beachtung der Toleranz.'],
+    ['Wie hoch ist die Toleranz beim Führerscheinentzug?', '15 km/h.'],
+    ['Wann darf ein Führerschein nach einem Blitzer frühestens entzogen werden?', 'Nach 12 Stunden.'],
+    ['Wer muss nichtdienstliche Tätigkeiten genehmigen?', 'Die Direktion (Rang 10+).'],
+    ['Ist Slotspielen im Casino während des Dienstes erlaubt?', 'Nein.'],
+    ['Wann dürfen Ausbildungen begonnen werden?', 'Nach erfolgreichem EST.'],
+    ['Wann muss ein geplanter Großeinsatz dokumentiert werden?', 'Nach Code 4.'],
+    ['Wer dokumentiert spontane 11-99-Einsätze?', 'Der höchstrangige Beamte bis Rang 9 vor Ort.'],
+    ['Wer muss an einer Dienstbesprechung teilnehmen?', 'Jeder Beamte, der sich im Dienst befindet.'],
+  ];
+
+  const maxOrder: any = await query('SELECT MAX(sort_order) as m FROM soc_training_questions WHERE training_id = ?', [trainingId]);
+  let sortOrder = maxOrder[0]?.m || 0;
+
+  for (const [frage, antwort] of fragen) {
+    sortOrder++;
+    await query(
+      'INSERT INTO soc_training_questions (training_id, kategorie, frage, antwort, punkte, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+      [trainingId, 'Dienst', frage, antwort, 1, sortOrder]
+    );
+  }
+
+  console.log(`${fragen.length} "Dienst"-Fragen für "Fahren – Theorie – Ortskunde" angelegt.`);
 }
 
 type DvBlock = { type: 'p' | 'li'; text: string; highlight?: boolean; children?: { text: string; highlight?: boolean }[] };

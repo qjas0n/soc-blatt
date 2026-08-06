@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { AlertCircle, Play, Shuffle } from 'lucide-react';
 import { startExam } from '@/app/actions';
 
@@ -15,6 +16,7 @@ export default function StartExamForm({ trainingId, haltCategories, memberNames 
     const totalHalts = haltCategories.reduce((s, c) => s + Math.min(3, c.halts.length), 0);
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
+    const router = useRouter();
 
     const handleSubmit = async (formData: FormData) => {
         setSaving(true);
@@ -23,6 +25,10 @@ export default function StartExamForm({ trainingId, haltCategories, memberNames 
         if (result?.error) {
             setError(result.error);
             setSaving(false);
+            return;
+        }
+        if (result?.success) {
+            router.push(`/ausbildungen/pruefungen/${result.examId}/durchfuehren`);
         }
     };
 
