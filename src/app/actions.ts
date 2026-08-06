@@ -74,7 +74,6 @@ export async function createUser(formData: FormData) {
     if (!session || session.role !== 'admin') return { error: 'Keine Berechtigung.' };
 
     const username = formData.get('username') as string;
-    const password = (formData.get('password') as string) || '12345';
     const display_name = formData.get('display_name') as string;
     const role = formData.get('role') as string;
     const rang = (formData.get('rang') as string) || 'SOC-Mitglied';
@@ -82,7 +81,10 @@ export async function createUser(formData: FormData) {
     const existing: any = await query('SELECT id FROM soc_users WHERE username = ?', [username]);
     if (existing && existing.length > 0) return { error: 'Benutzername existiert bereits.' };
 
-    const hash = hashPassword(password);
+    // Neue Accounts erhalten immer das Standard-Passwort 12345 und müssen es beim ersten
+    // Login zwingend ändern (siehe ForcePasswordChange) — Admins können kein eigenes
+    // Passwort vergeben.
+    const hash = hashPassword('12345');
     await query(
         'INSERT INTO soc_users (username, password_hash, display_name, role, rang, permissions) VALUES (?, ?, ?, ?, ?, ?)',
         [username, hash, display_name, role, rang, JSON.stringify({})]

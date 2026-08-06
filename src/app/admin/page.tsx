@@ -156,15 +156,17 @@ export default function AdminPage() {
                     loadUsers();
                 }} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
 
-                    <div style={{ display: 'flex', gap: '15px' }}>
-                        <div style={{ display: 'flex', flex: 1, flexDirection: 'column', gap: '5px' }}>
-                            <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Benutzername *</label>
-                            <input required name="username" type="text" style={{ padding: '8px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }} />
-                        </div>
-                        <div style={{ display: 'flex', flex: 1, flexDirection: 'column', gap: '5px' }}>
-                            <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Passwort</label>
-                            <input name="password" type="password" placeholder="Standard: 12345" style={{ padding: '8px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }} />
-                        </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                        <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Benutzername *</label>
+                        <input required name="username" type="text" style={{ padding: '8px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }} />
+                    </div>
+
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px',
+                        borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.25)',
+                        color: 'var(--color-yellow)', fontSize: '12px'
+                    }}>
+                        <KeyRound size={13} /> Passwort wird fest auf <strong>12345</strong> gesetzt — Änderung ist beim ersten Login Pflicht.
                     </div>
 
                     <div style={{ display: 'flex', gap: '15px' }}>
