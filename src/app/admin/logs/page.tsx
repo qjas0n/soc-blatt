@@ -15,7 +15,7 @@ export default function LoggingPage() {
     useEffect(() => {
         getCurrentUser().then(user => {
             setCurrentUser(user);
-            if (user && user.role === 'admin') {
+            if (user && (user.role === 'admin' || user.role === 'leitung')) {
                 getLogs().then(res => setLogs(res || []));
             }
             setLoading(false);
@@ -26,7 +26,7 @@ export default function LoggingPage() {
         return <div className="dashboard-content"><p style={{ color: 'var(--text-secondary)' }}>Lade Systemprotokoll...</p></div>;
     }
 
-    if (!currentUser || currentUser.role !== 'admin') {
+    if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'leitung')) {
         return (
             <div className="dashboard-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '16px' }}>
                 <AlertCircle size={40} style={{ color: 'var(--color-red)' }} />

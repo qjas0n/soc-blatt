@@ -55,6 +55,7 @@ export default function Sidebar() {
     const displayName = user?.displayName || 'Laden...';
     const role = user?.role || '';
     const isAdmin = role === 'admin';
+    const canManageAdmin = role === 'admin' || role === 'leitung';
     const roleLabel = role === 'admin' ? 'Administrator' : role === 'leitung' ? 'Leitung' : role === 'anwaerter' ? 'Anwärter' : 'Member';
     const initials = displayName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase();
     const avatarUrl = user?.avatarUrl || null;
@@ -230,7 +231,7 @@ export default function Sidebar() {
                     );
                 })}
 
-                {isAdmin && (
+                {canManageAdmin && (
                     <>
                         <div style={{
                             fontSize: '10px', fontWeight: '600', color: '#4b5563',

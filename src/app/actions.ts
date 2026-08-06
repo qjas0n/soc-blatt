@@ -64,14 +64,14 @@ export async function getMembers() {
 
 export async function getDefaultPasswordUserIds(): Promise<number[]> {
     const session = await getSession();
-    if (!session || session.role !== 'admin') return [];
+    if (!session || (session.role !== 'admin' && session.role !== 'leitung')) return [];
     const users = await query('SELECT id, password_hash FROM soc_users') as any[];
     return users.filter(u => verifyPassword('12345', u.password_hash)).map(u => u.id);
 }
 
 export async function createUser(formData: FormData) {
     const session = await getSession();
-    if (!session || session.role !== 'admin') return { error: 'Keine Berechtigung.' };
+    if (!session || (session.role !== 'admin' && session.role !== 'leitung')) return { error: 'Keine Berechtigung.' };
 
     const username = formData.get('username') as string;
     const display_name = formData.get('display_name') as string;
@@ -96,7 +96,7 @@ export async function createUser(formData: FormData) {
 
 export async function deleteUser(id: number) {
     const session = await getSession();
-    if (!session || session.role !== 'admin') return;
+    if (!session || (session.role !== 'admin' && session.role !== 'leitung')) return;
     if (session.userId === id) return;
     await query('DELETE FROM soc_users WHERE id = ?', [id]);
     await addLog('User Gelöscht', `Benutzer ID ${id} wurde gelöscht.`);
@@ -105,7 +105,7 @@ export async function deleteUser(id: number) {
 
 export async function updateUserRole(id: number, role: string) {
     const session = await getSession();
-    if (!session || session.role !== 'admin') return;
+    if (!session || (session.role !== 'admin' && session.role !== 'leitung')) return;
     await query('UPDATE soc_users SET role = ? WHERE id = ?', [role, id]);
     await addLog('Rolle Aktualisiert', `Rolle für User ID ${id} wurde auf "${role}" geändert.`);
     revalidatePath('/admin');
@@ -114,7 +114,7 @@ export async function updateUserRole(id: number, role: string) {
 
 export async function updateUserProfile(id: number, username: string, displayName: string, rang: string) {
     const session = await getSession();
-    if (!session || session.role !== 'admin') return { error: 'Keine Berechtigung.' };
+    if (!session || (session.role !== 'admin' && session.role !== 'leitung')) return { error: 'Keine Berechtigung.' };
     const u = username.trim();
     const d = displayName.trim();
     const r = rang.trim() || 'SOC-Mitglied';
@@ -194,13 +194,13 @@ export async function getUserCount(): Promise<number> {
 
 export async function getRecentLogs(limit: number = 8) {
     const session = await getSession();
-    if (!session || session.role !== 'admin') return [];
+    if (!session || (session.role !== 'admin' && session.role !== 'leitung')) return [];
     return await query('SELECT * FROM soc_logs ORDER BY created_at DESC LIMIT ?', [limit]) as any[];
 }
 
 export async function getLogs() {
     const session = await getSession();
-    if (!session || session.role !== 'admin') return [];
+    if (!session || (session.role !== 'admin' && session.role !== 'leitung')) return [];
     return await query('SELECT * FROM soc_logs ORDER BY created_at DESC') as any[];
 }
 

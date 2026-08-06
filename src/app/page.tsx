@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Crosshair, Users, Megaphone, GraduationCap, BookOpen, ClipboardList, Settings, Terminal, ChevronRight } from 'lucide-react';
+import { Crosshair, Users, Megaphone, GraduationCap, BookOpen, ClipboardList, Settings, Terminal, ChevronRight, UserCog } from 'lucide-react';
 import { getSession } from '@/lib/auth';
 import { getAnnouncements, getUserCount, getMembers, getTrainingCategories, isTrainingInstructor } from '@/app/actions';
 import AnnouncementsPanel from '@/components/AnnouncementsPanel';
@@ -18,14 +18,14 @@ export default async function HomePage() {
     const hour = new Date().getHours();
     const greeting = hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Guten Tag' : 'Guten Abend';
     const trainingCount = categories.reduce((sum: number, c: any) => sum + c.trainings.length, 0);
-    const isAdmin = session?.role === 'admin';
 
     const quickLinks = [
         { name: 'Ausbildungen', href: '/ausbildungen', icon: GraduationCap, show: true },
         { name: 'Dienstvorschriften', href: '/dienstvorschriften', icon: BookOpen, show: true },
         { name: 'Alle Prüfungen', href: '/ausbildungen/pruefungen', icon: ClipboardList, show: canManage },
         { name: 'Ausbildungsverwaltung', href: '/ausbildungen/verwaltung', icon: Settings, show: canManage },
-        { name: 'Systemprotokoll', href: '/admin/logs', icon: Terminal, show: isAdmin },
+        { name: 'Admin Panel', href: '/admin', icon: UserCog, show: canManage },
+        { name: 'Systemprotokoll', href: '/admin/logs', icon: Terminal, show: canManage },
     ].filter(l => l.show);
 
     return (
