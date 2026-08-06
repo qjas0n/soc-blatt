@@ -94,7 +94,7 @@ export async function initDb() {
       kategorie VARCHAR(255) DEFAULT '',
       frage TEXT NOT NULL,
       antwort TEXT NOT NULL,
-      punkte INT DEFAULT 1,
+      punkte DECIMAL(6,2) DEFAULT 1,
       sort_order INT DEFAULT 0,
       FOREIGN KEY (training_id) REFERENCES soc_trainings(id) ON DELETE CASCADE
     )`,
@@ -128,8 +128,9 @@ export async function initDb() {
       examiner3_name VARCHAR(255) DEFAULT '',
       status VARCHAR(30) DEFAULT 'in_bearbeitung',
       notes TEXT DEFAULT '',
-      total_points INT DEFAULT 0,
-      max_points INT DEFAULT 0,
+      total_points DECIMAL(6,2) DEFAULT 0,
+      max_points DECIMAL(6,2) DEFAULT 0,
+      current_step INT DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (training_id) REFERENCES soc_trainings(id) ON DELETE CASCADE,
       FOREIGN KEY (examiner_id) REFERENCES soc_users(id) ON DELETE SET NULL
@@ -155,8 +156,8 @@ export async function initDb() {
       question_id INT DEFAULT NULL,
       frage TEXT NOT NULL,
       antwort TEXT DEFAULT '',
-      max_punkte INT DEFAULT 1,
-      punkte_erreicht INT DEFAULT 0,
+      max_punkte DECIMAL(6,2) DEFAULT 1,
+      punkte_erreicht DECIMAL(6,2) DEFAULT 0,
       FOREIGN KEY (exam_id) REFERENCES soc_training_exams(id) ON DELETE CASCADE,
       FOREIGN KEY (exam_halt_id) REFERENCES soc_training_exam_halts(id) ON DELETE CASCADE,
       FOREIGN KEY (question_id) REFERENCES soc_training_questions(id) ON DELETE SET NULL
@@ -238,6 +239,27 @@ export async function initDb() {
         await query(`ALTER TABLE soc_training_exams DROP COLUMN ${col}`);
       } catch { /* column doesn't exist */ }
     }
+
+    // Widen point columns from INT to DECIMAL so half-points (e.g. 0.5) can be awarded
+    try {
+      await query('ALTER TABLE soc_training_questions MODIFY COLUMN punkte DECIMAL(6,2) DEFAULT 1');
+    } catch { /* ignore */ }
+    try {
+      await query('ALTER TABLE soc_training_exams MODIFY COLUMN total_points DECIMAL(6,2) DEFAULT 0');
+    } catch { /* ignore */ }
+    try {
+      await query('ALTER TABLE soc_training_exams MODIFY COLUMN max_points DECIMAL(6,2) DEFAULT 0');
+    } catch { /* ignore */ }
+    try {
+      await query('ALTER TABLE soc_training_exam_answers MODIFY COLUMN max_punkte DECIMAL(6,2) DEFAULT 1');
+    } catch { /* ignore */ }
+    try {
+      await query('ALTER TABLE soc_training_exam_answers MODIFY COLUMN punkte_erreicht DECIMAL(6,2) DEFAULT 0');
+    } catch { /* ignore */ }
+
+    try {
+      await query('ALTER TABLE soc_training_exams ADD COLUMN current_step INT DEFAULT 0');
+    } catch { /* column already exists */ }
 
     await migrateRoutesToHaltCategories();
 

@@ -325,7 +325,7 @@ export default function EditTrainingPage({ params }: { params: Promise<{ id: str
                         </div>
                         <div style={{ display: 'flex', flex: 1, flexDirection: 'column', gap: '5px' }}>
                             <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Punkte</label>
-                            <input name="punkte" type="number" min={1} defaultValue={editingQuestion?.punkte || 1} style={{ padding: '8px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }} />
+                            <input name="punkte" type="text" inputMode="decimal" placeholder="z. B. 0,5" defaultValue={editingQuestion?.punkte ?? 1} style={{ padding: '8px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }} />
                         </div>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>

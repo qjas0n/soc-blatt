@@ -293,6 +293,7 @@ export async function startExam(formData: FormData) {
 
     if (chosenHalts.length > 0) {
         let sortOrder = 0;
+        const usedQuestionIds = new Set<number>();
         for (const halt of chosenHalts) {
             sortOrder++;
             const haltResult: any = await query(
@@ -300,7 +301,9 @@ export async function startExam(formData: FormData) {
                 [examId, halt.id, halt.name, halt.bild, sortOrder]
             );
             const examHaltId = haltResult.insertId;
-            const haltQuestions = pickRandom(allQuestions, Math.min(3, allQuestions.length));
+            const remainingQuestions = allQuestions.filter(q => !usedQuestionIds.has(q.id));
+            const haltQuestions = pickRandom(remainingQuestions, Math.min(3, remainingQuestions.length));
+            haltQuestions.forEach(q => usedQuestionIds.add(q.id));
             for (const q of haltQuestions) {
                 maxPoints += q.punkte;
                 await query(
@@ -359,6 +362,30 @@ export async function updateExamHaltFlag(examHaltId: number, field: string, valu
     await query(`UPDATE soc_training_exam_halts SET ?? = ? WHERE id = ?`, [field, value ? 1 : 0, examHaltId]);
     revalidatePath('/ausbildungen/pruefungen');
     return { success: true };
+}
+
+export async function updateExamStep(examId: number, step: number) {
+    const session = await getSession();
+    if (!session || (session.role !== 'admin' && session.role !== 'leitung')) return { error: 'Keine Berechtigung.' };
+    await query('UPDATE soc_training_exams SET current_step = ? WHERE id = ?', [step, examId]);
+    return { success: true };
+}
+
+// Lean polling endpoint so multiple examiners scoring the same exam stay in sync live
+// (scores, halt flags, current stop, status) without a full page refresh.
+export async function getExamLiveState(examId: number) {
+    const session = await getSession();
+    if (!session || (session.role !== 'admin' && session.role !== 'leitung')) return { error: 'Keine Berechtigung.' };
+
+    const examRows: any = await query('SELECT status, total_points, max_points, current_step FROM soc_training_exams WHERE id = ?', [examId]);
+    if (!examRows || examRows.length === 0) return { error: 'Prüfung nicht gefunden.' };
+
+    const [answers, halts] = await Promise.all([
+        query('SELECT id, punkte_erreicht FROM soc_training_exam_answers WHERE exam_id = ?', [examId]) as Promise<any[]>,
+        query('SELECT id, gefunden, schnellste_route FROM soc_training_exam_halts WHERE exam_id = ?', [examId]) as Promise<any[]>,
+    ]);
+
+    return { success: true, exam: examRows[0], answers, halts };
 }
 
 export async function finishExam(formData: FormData) {
@@ -627,7 +654,8 @@ export async function addQuestion(formData: FormData) {
     const kategorie = (formData.get('kategorie') as string || '').trim();
     const frage = (formData.get('frage') as string || '').trim();
     const antwort = (formData.get('antwort') as string || '').trim();
-    const punkte = Math.max(1, Number(formData.get('punkte')) || 1);
+    const punkteRaw = (formData.get('punkte') as string || '').replace(',', '.');
+    const punkte = Math.max(0.5, Number(punkteRaw) || 1);
 
     if (!frage || !antwort) return { error: 'Frage und Antwort sind erforderlich.' };
 
@@ -651,7 +679,8 @@ export async function updateQuestion(formData: FormData) {
     const kategorie = (formData.get('kategorie') as string || '').trim();
     const frage = (formData.get('frage') as string || '').trim();
     const antwort = (formData.get('antwort') as string || '').trim();
-    const punkte = Math.max(1, Number(formData.get('punkte')) || 1);
+    const punkteRaw = (formData.get('punkte') as string || '').replace(',', '.');
+    const punkte = Math.max(0.5, Number(punkteRaw) || 1);
 
     if (!frage || !antwort) return { error: 'Frage und Antwort sind erforderlich.' };
 

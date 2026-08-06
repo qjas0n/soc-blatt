@@ -1,9 +1,12 @@
 "use client";
 
-import React, { useState, useMemo, useTransition } from 'react';
-import { MapPin, HelpCircle, Minus, Plus, Loader2, ImageOff, ChevronLeft, ChevronRight as ChevronRightIcon, CheckCircle2 } from 'lucide-react';
-import { updateExamAnswer, updateExamHaltFlag } from '@/app/actions';
+import React, { useState, useMemo, useEffect, useRef, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { MapPin, HelpCircle, Minus, Plus, Loader2, ImageOff, ChevronLeft, ChevronRight as ChevronRightIcon, CheckCircle2, Users } from 'lucide-react';
+import { updateExamAnswer, updateExamHaltFlag, updateExamStep, getExamLiveState } from '@/app/actions';
 import FinishExamCard from '@/components/FinishExamCard';
+
+const POLL_INTERVAL_MS = 2500;
 
 interface Answer {
     id: number;
@@ -24,10 +27,11 @@ interface Halt {
 
 interface Exam {
     id: number;
+    current_step?: number;
     halts: Halt[];
 }
 
-function QuestionBlock({ answer, savingId, onChange }: { answer: Answer; savingId: number | null; onChange: (a: Answer, value: number) => void }) {
+function QuestionBlock({ answer, savingId, onFocus, onBlur, onChange }: { answer: Answer; savingId: number | null; onFocus: () => void; onBlur: () => void; onChange: (a: Answer, value: number) => void }) {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingBottom: '14px', borderBottom: '1px solid var(--border-color)' }}>
             <div style={{ fontSize: '14px', fontWeight: '600' }}>{answer.frage}</div>
@@ -37,7 +41,7 @@ function QuestionBlock({ answer, savingId, onChange }: { answer: Answer; savingI
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Punkte:</span>
-                <button type="button" onClick={() => onChange(answer, answer.punkte_erreicht - 1)} style={{
+                <button type="button" onClick={() => onChange(answer, answer.punkte_erreicht - 0.5)} style={{
                     width: '26px', height: '26px', borderRadius: '6px', border: '1px solid var(--border-color)',
                     background: 'rgba(255,255,255,0.03)', color: 'var(--text-secondary)', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center'
@@ -45,15 +49,17 @@ function QuestionBlock({ answer, savingId, onChange }: { answer: Answer; savingI
                     <Minus size={13} />
                 </button>
                 <input
-                    type="number" min={0} max={answer.max_punkte}
+                    type="text" inputMode="decimal"
                     value={answer.punkte_erreicht}
-                    onChange={e => onChange(answer, Number(e.target.value) || 0)}
+                    onFocus={onFocus}
+                    onBlur={onBlur}
+                    onChange={e => onChange(answer, Number(e.target.value.replace(',', '.')) || 0)}
                     style={{
-                        width: '44px', textAlign: 'center', padding: '5px', borderRadius: '6px',
+                        width: '54px', textAlign: 'center', padding: '5px', borderRadius: '6px',
                         backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white', fontSize: '13px'
                     }}
                 />
-                <button type="button" onClick={() => onChange(answer, answer.punkte_erreicht + 1)} style={{
+                <button type="button" onClick={() => onChange(answer, answer.punkte_erreicht + 0.5)} style={{
                     width: '26px', height: '26px', borderRadius: '6px', border: '1px solid var(--border-color)',
                     background: 'rgba(255,255,255,0.03)', color: 'var(--text-secondary)', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center'
@@ -71,8 +77,12 @@ function QuestionBlock({ answer, savingId, onChange }: { answer: Answer; savingI
 export default function RouteExamWizard({ exam, bestehenProzent, memberNames }: { exam: Exam; bestehenProzent: number; memberNames: string[] }) {
     const [halts, setHalts] = useState<Halt[]>(exam.halts);
     const [savingId, setSavingId] = useState<number | null>(null);
-    const [stepIndex, setStepIndex] = useState(0);
+    const [stepIndex, setStepIndex] = useState(exam.current_step || 0);
+    const [focusedAnswerId, setFocusedAnswerId] = useState<number | null>(null);
     const [, startTransition] = useTransition();
+    const router = useRouter();
+    const focusedAnswerIdRef = useRef<number | null>(null);
+    focusedAnswerIdRef.current = focusedAnswerId;
 
     const totals = useMemo(() => {
         const allAnswers = halts.flatMap(h => h.answers);
@@ -109,6 +119,48 @@ export default function RouteExamWizard({ exam, bestehenProzent, memberNames }: 
         });
     };
 
+    const goToStep = (newIndex: number) => {
+        const clamped = Math.max(0, Math.min(halts.length, newIndex));
+        setStepIndex(clamped);
+        startTransition(async () => {
+            await updateExamStep(exam.id, clamped);
+        });
+    };
+
+    // Poll so a second examiner scoring the same exam sees updates (points, flags,
+    // current stop, finish status) live without needing to refresh the page.
+    useEffect(() => {
+        const interval = setInterval(async () => {
+            const state: any = await getExamLiveState(exam.id);
+            if (!state || state.error) return;
+
+            if (state.exam.status !== 'in_bearbeitung') {
+                router.push(`/ausbildungen/pruefungen/${exam.id}`);
+                return;
+            }
+
+            setHalts(prev => prev.map(h => {
+                const hs = state.halts.find((x: any) => x.id === h.id);
+                if (!hs) return h;
+                return {
+                    ...h,
+                    gefunden: hs.gefunden,
+                    schnellste_route: hs.schnellste_route,
+                    answers: h.answers.map(a => {
+                        if (a.id === focusedAnswerIdRef.current) return a;
+                        const as = state.answers.find((x: any) => x.id === a.id);
+                        return as ? { ...a, punkte_erreicht: as.punkte_erreicht } : a;
+                    }),
+                };
+            }));
+
+            if (typeof state.exam.current_step === 'number') {
+                setStepIndex(prev => prev === state.exam.current_step ? prev : state.exam.current_step);
+            }
+        }, POLL_INTERVAL_MS);
+        return () => clearInterval(interval);
+    }, [exam.id, router]);
+
     const done = stepIndex >= halts.length;
     const current = !done ? halts[stepIndex] : null;
 
@@ -116,7 +168,12 @@ export default function RouteExamWizard({ exam, bestehenProzent, memberNames }: 
         <>
             <div className="card">
                 <div className="card-header">
-                    <span>Ortskunde — läuft gerade</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        Ortskunde — läuft gerade
+                        <span title="Live synchronisiert mit anderen Prüfern" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            <Users size={11} /> Live
+                        </span>
+                    </span>
                     <span style={{ fontSize: '13px', fontWeight: '700', color: totals.pct >= bestehenProzent ? 'var(--color-green)' : 'var(--color-red)' }}>
                         {totals.total} / {totals.max} Punkte ({totals.pct}%)
                     </span>
@@ -167,7 +224,12 @@ export default function RouteExamWizard({ exam, bestehenProzent, memberNames }: 
                                         </span>
                                     </div>
                                     {current.answers.map(a => (
-                                        <QuestionBlock key={a.id} answer={a} savingId={savingId} onChange={(ans, val) => setAnswerValue(current.id, ans, val)} />
+                                        <QuestionBlock
+                                            key={a.id} answer={a} savingId={savingId}
+                                            onFocus={() => setFocusedAnswerId(a.id)}
+                                            onBlur={() => setFocusedAnswerId(prev => prev === a.id ? null : prev)}
+                                            onChange={(ans, val) => setAnswerValue(current.id, ans, val)}
+                                        />
                                     ))}
                                 </div>
                             )}
@@ -186,14 +248,14 @@ export default function RouteExamWizard({ exam, bestehenProzent, memberNames }: 
                     <button
                         type="button"
                         disabled={stepIndex === 0}
-                        onClick={() => setStepIndex(i => Math.max(0, i - 1))}
+                        onClick={() => goToStep(stepIndex - 1)}
                         className="btn"
                         style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', opacity: stepIndex === 0 ? 0.4 : 1, cursor: stepIndex === 0 ? 'not-allowed' : 'pointer' }}
                     >
                         <ChevronLeft size={14} /> Zurück
                     </button>
                     {!done && (
-                        <button type="button" onClick={() => setStepIndex(i => Math.min(halts.length, i + 1))} className="btn btn-primary">
+                        <button type="button" onClick={() => goToStep(stepIndex + 1)} className="btn btn-primary">
                             Weiter <ChevronRightIcon size={14} />
                         </button>
                     )}

@@ -13,7 +13,8 @@ const pool = globalForDb.socDbPool ?? mysql.createPool({
     database: process.env.DB_NAME || 'soc',
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
+    queueLimit: 0,
+    decimalNumbers: true
 });
 
 if (process.env.NODE_ENV !== 'production') {
