@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { query } from '@/lib/db';
-import { Database, CheckCircle2, XCircle, Server, Clock, Table2 } from 'lucide-react';
+import { Database, CheckCircle2, XCircle, Server, Clock, Table2, Wrench } from 'lucide-react';
+import InitDbButton from '@/components/InitDbButton';
 
 interface TableInfo {
     name: string;
@@ -121,6 +122,21 @@ export default async function DebugPage({ searchParams }: { searchParams: Promis
                         ) : (
                             <div style={{ color: '#f87171', fontFamily: 'monospace', fontSize: '12px', whiteSpace: 'pre-wrap' }}>{dbError}</div>
                         )}
+                    </div>
+                </div>
+
+                <div style={cardStyle}>
+                    <div style={headerStyle}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Wrench size={15} /> Wartung
+                        </span>
+                    </div>
+                    <div style={{ padding: '16px 18px' }}>
+                        <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px' }}>
+                            Führt dieselbe Initialisierung wie <code style={{ fontFamily: 'monospace' }}>npm run db:init</code> aus: legt die Datenbank an falls nötig,
+                            erstellt fehlende Tabellen/Spalten und füllt Standard-Daten (Admin-Account, Ausbildungen, Dienstvorschriften) nur dort ein, wo noch nichts existiert.
+                        </p>
+                        <InitDbButton debugKey={key!} />
                     </div>
                 </div>
 
