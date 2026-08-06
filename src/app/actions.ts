@@ -31,7 +31,7 @@ export async function loginUser(formData: FormData) {
     clearFailures(key);
     await createSession(user.id);
     await addLog('Login', `Benutzer ${user.display_name} hat sich eingeloggt.`);
-    redirect('/');
+    return { success: true };
 }
 
 export async function logoutUser() {

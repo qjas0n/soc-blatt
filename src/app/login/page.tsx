@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Crosshair, Eye, EyeOff, LogIn, AlertCircle, Lock, User } from 'lucide-react';
 import { loginUser } from '@/app/actions';
 
@@ -9,6 +10,7 @@ export default function LoginPage() {
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [focused, setFocused] = useState<string | null>(null);
+    const router = useRouter();
 
     const handleSubmit = async (formData: FormData) => {
         setLoading(true);
@@ -17,6 +19,11 @@ export default function LoginPage() {
         if (result?.error) {
             setError(result.error);
             setLoading(false);
+            return;
+        }
+        if (result?.success) {
+            router.push('/');
+            router.refresh();
         }
     };
 
