@@ -46,8 +46,10 @@ export default function Sidebar() {
         setMobileOpen(false);
     }, [pathname]);
 
-    const menuItems = [
+    const topItems = [
         { name: 'Startseite', path: '/', icon: Home },
+    ];
+    const menuItems = [
         { name: 'Ausbildungen', path: '/ausbildungen', icon: GraduationCap },
         { name: 'Dienstvorschriften', path: '/dienstvorschriften', icon: BookOpen },
     ];
@@ -188,6 +190,57 @@ export default function Sidebar() {
                 flexGrow: 1, overflowY: 'auto', padding: '8px 12px',
                 display: 'flex', flexDirection: 'column', gap: '2px'
             }}>
+                {topItems.map((item) => {
+                    const isActive = item.path === '/' ? pathname === '/' : pathname.startsWith(item.path);
+                    const isHovered = hoveredItem === item.path;
+                    return (
+                        <Link href={item.path} key={item.path} style={{ textDecoration: 'none' }}>
+                            <div
+                                onMouseEnter={() => setHoveredItem(item.path)}
+                                onMouseLeave={() => setHoveredItem(null)}
+                                style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                    padding: '9px 12px',
+                                    borderRadius: '8px', cursor: 'pointer',
+                                    color: isActive ? 'white' : isHovered ? '#e2e8f0' : '#94a3b8',
+                                    background: isActive
+                                        ? 'linear-gradient(135deg, rgba(239,68,68,0.2), rgba(239,68,68,0.08))'
+                                        : isHovered ? 'rgba(255,255,255,0.04)' : 'transparent',
+                                    border: isActive ? '1px solid rgba(239,68,68,0.2)' : '1px solid transparent',
+                                    transition: 'all 0.15s ease',
+                                    position: 'relative'
+                                }}
+                            >
+                                {isActive && (
+                                    <div style={{
+                                        position: 'absolute', left: '0', top: '50%', transform: 'translateY(-50%)',
+                                        width: '3px', height: '18px', borderRadius: '0 3px 3px 0',
+                                        background: '#ef4444',
+                                        boxShadow: '0 0 8px rgba(239,68,68,0.5)'
+                                    }} />
+                                )}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <item.icon size={16} style={{
+                                        color: isActive ? '#f87171' : 'inherit', transition: 'color 0.15s'
+                                    }} />
+                                    <span style={{ fontSize: '13px', fontWeight: isActive ? '600' : '400' }}>
+                                        {item.name}
+                                    </span>
+                                </div>
+                                {isActive && <ChevronRight size={14} style={{ color: '#f87171', opacity: 0.7 }} />}
+                            </div>
+                        </Link>
+                    );
+                })}
+
+                <div style={{
+                    fontSize: '10px', fontWeight: '600', color: '#4b5563',
+                    letterSpacing: '1.5px', padding: '14px 12px 6px',
+                    textTransform: 'uppercase'
+                }}>
+                    ALLGEMEIN
+                </div>
+
                 {menuItems.map((item) => {
                     const isActive = item.path === '/' ? pathname === '/' : pathname.startsWith(item.path);
                     const isHovered = hoveredItem === item.path;

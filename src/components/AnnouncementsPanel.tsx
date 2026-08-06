@@ -1,8 +1,11 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Megaphone, Plus, Trash2 } from 'lucide-react';
-import { addAnnouncement, deleteAnnouncement } from '@/app/actions';
+import { addAnnouncement, deleteAnnouncement, getAnnouncements } from '@/app/actions';
+import { useLivePolling } from '@/lib/useLivePolling';
+
+const POLL_INTERVAL_MS = 4000;
 
 interface Announcement {
     id: number;
@@ -19,6 +22,13 @@ export default function AnnouncementsPanel({ initial }: { initial: Announcement[
     const [text, setText] = useState('');
     const [type, setType] = useState('Info');
     const [saving, setSaving] = useState(false);
+    const deletedIdsRef = useRef<Set<number>>(new Set());
+
+    useLivePolling(async () => {
+        const fresh = await getAnnouncements();
+        if (!fresh) return;
+        setAnnouncements(fresh.filter((a: Announcement) => !deletedIdsRef.current.has(a.id)));
+    }, POLL_INTERVAL_MS);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -28,15 +38,17 @@ export default function AnnouncementsPanel({ initial }: { initial: Announcement[
         formData.set('text', text.trim());
         formData.set('type', type);
         await addAnnouncement(formData);
+        const fresh = await getAnnouncements();
+        setAnnouncements(fresh || []);
         setText('');
         setType('Info');
         setShowForm(false);
         setSaving(false);
-        window.location.reload();
     };
 
     const handleDelete = async (id: number) => {
         if (!confirm('Ankündigung wirklich löschen?')) return;
+        deletedIdsRef.current.add(id);
         setAnnouncements(prev => prev.filter(a => a.id !== id));
         await deleteAnnouncement(id);
     };

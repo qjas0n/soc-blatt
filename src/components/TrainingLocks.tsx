@@ -1,9 +1,12 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { ShieldOff, Plus, Trash2, AlertCircle } from 'lucide-react';
 import Modal from '@/components/Modal';
-import { addTrainingLock, deleteTrainingLock } from '@/app/actions';
+import { addTrainingLock, deleteTrainingLock, getTrainingLocks } from '@/app/actions';
+import { useLivePolling } from '@/lib/useLivePolling';
+
+const POLL_INTERVAL_MS = 4000;
 
 interface Lock {
     id: number;
@@ -23,6 +26,13 @@ export default function TrainingLocks({ initial, canManage, currentUserName, mem
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
+    const deletedIdsRef = useRef<Set<number>>(new Set());
+
+    useLivePolling(async () => {
+        const fresh = await getTrainingLocks();
+        if (!fresh) return;
+        setLocks(fresh.filter((l: Lock) => !deletedIdsRef.current.has(l.id)));
+    }, POLL_INTERVAL_MS);
 
     const handleSubmit = async (formData: FormData) => {
         setSaving(true);
@@ -30,12 +40,14 @@ export default function TrainingLocks({ initial, canManage, currentUserName, mem
         const result = await addTrainingLock(formData);
         setSaving(false);
         if (result?.error) { setError(result.error); return; }
+        const fresh = await getTrainingLocks();
+        setLocks(fresh || []);
         setIsModalOpen(false);
-        window.location.reload();
     };
 
     const handleDelete = async (id: number) => {
         if (!confirm('Diese Ausbildungssperre wirklich aufheben?')) return;
+        deletedIdsRef.current.add(id);
         setLocks(prev => prev.filter(l => l.id !== id));
         await deleteTrainingLock(id);
     };

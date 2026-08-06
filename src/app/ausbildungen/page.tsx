@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import { GraduationCap, ChevronRight, Car, Target, Scale, Brain, FileQuestion, ClipboardList, Radio, Settings } from 'lucide-react';
+import { GraduationCap, ChevronRight, Car, Target, Scale, Brain, FileQuestion, ClipboardList, Settings } from 'lucide-react';
 import { getTrainingCategories, isTrainingInstructor, getTrainingLocks, getMemberNames, getCurrentUser, getOngoingExams } from '@/app/actions';
 import TrainingLocks from '@/components/TrainingLocks';
+import OngoingExamsPanel from '@/components/OngoingExamsPanel';
 
 const TRAINING_ICONS: Record<string, any> = {
     'fahren-theorie-ortskunde': Car,
@@ -49,48 +50,7 @@ export default async function AusbildungenPage() {
                 )}
             </div>
 
-            {canManage && ongoing.length > 0 && (
-                <div className="card" style={{ borderColor: 'rgba(234,179,8,0.3)' }}>
-                    <div className="card-header">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Radio size={16} style={{ color: 'var(--color-yellow)' }} />
-                            <span>Laufende Prüfungen</span>
-                        </div>
-                        <span style={{
-                            backgroundColor: 'rgba(234,179,8,0.15)', color: 'var(--color-yellow)',
-                            padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: '600'
-                        }}>{ongoing.length} aktiv</span>
-                    </div>
-                    <div style={{ overflow: 'auto' }}>
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Prüfling</th>
-                                    <th>Ausbildung</th>
-                                    <th className="text-center">Punkte (bisher)</th>
-                                    <th>Gestartet von</th>
-                                    <th />
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {ongoing.map((e: any) => (
-                                    <tr key={e.id}>
-                                        <td style={{ fontWeight: '600' }}>{e.candidate_name}</td>
-                                        <td style={{ color: 'var(--text-secondary)' }}>{e.training_title}</td>
-                                        <td className="text-center" style={{ fontWeight: '600', color: 'var(--color-yellow)' }}>{e.total_points} / {e.max_points}</td>
-                                        <td style={{ color: 'var(--text-secondary)' }}>{e.examiner_name}</td>
-                                        <td className="text-center">
-                                            <Link href={`/ausbildungen/pruefungen/${e.id}/durchfuehren`} style={{ textDecoration: 'none' }}>
-                                                <button className="btn btn-primary" style={{ padding: '5px 12px', fontSize: '12px' }}>Öffnen</button>
-                                            </Link>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
+            {canManage && <OngoingExamsPanel initial={ongoing} />}
 
             <TrainingLocks initial={locks} canManage={canManage} currentUserName={currentUser?.displayName || ''} memberNames={memberNames} />
 
