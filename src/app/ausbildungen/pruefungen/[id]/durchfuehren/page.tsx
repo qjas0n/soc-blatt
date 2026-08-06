@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ChevronRight, Radio, Lock } from 'lucide-react';
-import { getExamDetail, isTrainingInstructor } from '@/app/actions';
+import { getExamDetail, isTrainingInstructor, getMemberNames } from '@/app/actions';
 import LiveExamForm from '@/components/LiveExamForm';
+import RouteExamWizard from '@/components/RouteExamWizard';
 
 export default async function ConductExamPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
@@ -20,7 +21,10 @@ export default async function ConductExamPage({ params }: { params: Promise<{ id
         );
     }
 
-    const exam = await getExamDetail(Number(id));
+    const [exam, memberNames] = await Promise.all([
+        getExamDetail(Number(id)),
+        getMemberNames(),
+    ]);
     if (!exam) notFound();
 
     if (exam.status !== 'in_bearbeitung') {
@@ -50,7 +54,11 @@ export default async function ConductExamPage({ params }: { params: Promise<{ id
                 </div>
             </div>
 
-            <LiveExamForm exam={exam} bestehenProzent={exam.training_bestehen_prozent ?? 80} />
+            {exam.halts.length > 0 ? (
+                <RouteExamWizard exam={exam as any} bestehenProzent={exam.training_bestehen_prozent ?? 80} memberNames={memberNames} />
+            ) : (
+                <LiveExamForm exam={exam} bestehenProzent={exam.training_bestehen_prozent ?? 80} memberNames={memberNames} />
+            )}
         </div>
     );
 }

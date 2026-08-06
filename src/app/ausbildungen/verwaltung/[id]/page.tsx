@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Save, Plus, Trash2, Pencil, HelpCircle, MapPin, Lock } from 'lucide-react';
+import { ChevronRight, Save, Plus, Trash2, Pencil, Lock, FolderPlus } from 'lucide-react';
 import Modal from '@/components/Modal';
 import {
     getTrainingForEdit, updateTraining, addQuestion, updateQuestion, deleteQuestion,
-    addRoute, updateRoute, deleteRoute, isTrainingInstructor
+    addHaltCategory, updateHaltCategory, deleteHaltCategory, addHalt, updateHalt, deleteHalt,
+    isTrainingInstructor
 } from '@/app/actions';
 
 export default function EditTrainingPage({ params }: { params: Promise<{ id: string }> }) {
@@ -20,8 +21,11 @@ export default function EditTrainingPage({ params }: { params: Promise<{ id: str
 
     const [qModalOpen, setQModalOpen] = useState(false);
     const [editingQuestion, setEditingQuestion] = useState<any | null>(null);
-    const [rModalOpen, setRModalOpen] = useState(false);
-    const [editingRoute, setEditingRoute] = useState<any | null>(null);
+    const [catModalOpen, setCatModalOpen] = useState(false);
+    const [editingCategory, setEditingCategory] = useState<any | null>(null);
+    const [haltModalOpen, setHaltModalOpen] = useState(false);
+    const [editingHalt, setEditingHalt] = useState<any | null>(null);
+    const [haltCategoryId, setHaltCategoryId] = useState<number | null>(null);
     const [error, setError] = useState('');
 
     const load = async () => {
@@ -83,27 +87,52 @@ export default function EditTrainingPage({ params }: { params: Promise<{ id: str
         load();
     };
 
-    const openNewRoute = () => { setEditingRoute(null); setError(''); setRModalOpen(true); };
-    const openEditRoute = (r: any) => { setEditingRoute(r); setError(''); setRModalOpen(true); };
+    const openNewCategory = () => { setEditingCategory(null); setError(''); setCatModalOpen(true); };
+    const openEditCategory = (c: any) => { setEditingCategory(c); setError(''); setCatModalOpen(true); };
 
-    const handleSaveRoute = async (formData: FormData) => {
+    const handleSaveCategory = async (formData: FormData) => {
         setError('');
         formData.set('training_id', String(trainingId));
         let res;
-        if (editingRoute) {
-            formData.set('id', String(editingRoute.id));
-            res = await updateRoute(formData);
+        if (editingCategory) {
+            formData.set('id', String(editingCategory.id));
+            res = await updateHaltCategory(formData);
         } else {
-            res = await addRoute(formData);
+            res = await addHaltCategory(formData);
         }
         if (res?.error) { setError(res.error); return; }
-        setRModalOpen(false);
+        setCatModalOpen(false);
         load();
     };
 
-    const handleDeleteRoute = async (rid: number) => {
-        if (!confirm('Diese Strecke wirklich löschen?')) return;
-        await deleteRoute(rid, trainingId);
+    const handleDeleteCategory = async (cid: number) => {
+        if (!confirm('Diese Kategorie inkl. aller Standorte wirklich löschen?')) return;
+        await deleteHaltCategory(cid, trainingId);
+        load();
+    };
+
+    const openNewHalt = (categoryId: number) => { setEditingHalt(null); setHaltCategoryId(categoryId); setError(''); setHaltModalOpen(true); };
+    const openEditHalt = (h: any) => { setEditingHalt(h); setHaltCategoryId(h.category_id); setError(''); setHaltModalOpen(true); };
+
+    const handleSaveHalt = async (formData: FormData) => {
+        setError('');
+        formData.set('training_id', String(trainingId));
+        formData.set('category_id', String(haltCategoryId));
+        let res;
+        if (editingHalt) {
+            formData.set('id', String(editingHalt.id));
+            res = await updateHalt(formData);
+        } else {
+            res = await addHalt(formData);
+        }
+        if (res?.error) { setError(res.error); return; }
+        setHaltModalOpen(false);
+        load();
+    };
+
+    const handleDeleteHalt = async (hid: number) => {
+        if (!confirm('Diesen Standort wirklich löschen?')) return;
+        await deleteHalt(hid, trainingId);
         load();
     };
 
@@ -224,45 +253,67 @@ export default function EditTrainingPage({ params }: { params: Promise<{ id: str
 
             <div className="card">
                 <div className="card-header">
-                    <span>{training.strecken_titel || 'Strecken'}</span>
-                    <button className="btn btn-primary" style={{ padding: '5px 12px', fontSize: '12px' }} onClick={openNewRoute}>
-                        <Plus size={13} /> Strecke hinzufügen
+                    <span>{training.strecken_titel || 'Standorte'} — Kategorien</span>
+                    <button className="btn btn-primary" style={{ padding: '5px 12px', fontSize: '12px' }} onClick={openNewCategory}>
+                        <FolderPlus size={13} /> Kategorie hinzufügen
                     </button>
                 </div>
-                <div style={{ overflow: 'auto' }}>
-                    {training.routes.length === 0 ? (
-                        <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>Noch keine Strecken hinterlegt.</div>
-                    ) : (
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th style={{ width: '80px' }}>Strecke</th>
-                                    <th>Halt 1</th>
-                                    <th>Halt 2</th>
-                                    <th>Halt 3</th>
-                                    <th className="text-center" style={{ width: '90px' }}>Aktionen</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {training.routes.map((r: any) => (
-                                    <tr key={r.id}>
-                                        <td style={{ fontWeight: '600', color: 'var(--color-accent)' }}>{r.strecke_nr}</td>
-                                        <td>{r.halt1}</td>
-                                        <td>{r.halt2}</td>
-                                        <td>{r.halt3}</td>
-                                        <td className="text-center">
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                                                <button onClick={() => openEditRoute(r)} style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', padding: '5px' }}><Pencil size={14} /></button>
-                                                <button onClick={() => handleDeleteRoute(r.id)} style={{ background: 'none', border: 'none', color: 'var(--color-red)', cursor: 'pointer', padding: '5px' }}><Trash2 size={15} /></button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
+                <div className="card-content" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
+                        Pro Prüfung werden aus jeder Kategorie bis zu 3 Standorte zufällig ausgewählt.
+                    </p>
                 </div>
+                {training.haltCategories.length === 0 && (
+                    <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>Noch keine Kategorien hinterlegt.</div>
+                )}
             </div>
+
+            {training.haltCategories.map((c: any) => (
+                <div className="card" key={c.id}>
+                    <div className="card-header">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>{c.name}</span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>({c.halts.length} Standorte)</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                            <button className="btn btn-primary" style={{ padding: '5px 12px', fontSize: '12px' }} onClick={() => openNewHalt(c.id)}>
+                                <Plus size={13} /> Standort hinzufügen
+                            </button>
+                            <button onClick={() => openEditCategory(c)} style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', padding: '5px' }}><Pencil size={14} /></button>
+                            <button onClick={() => handleDeleteCategory(c.id)} style={{ background: 'none', border: 'none', color: 'var(--color-red)', cursor: 'pointer', padding: '5px' }}><Trash2 size={15} /></button>
+                        </div>
+                    </div>
+                    <div style={{ overflow: 'auto' }}>
+                        {c.halts.length === 0 ? (
+                            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>Noch keine Standorte in dieser Kategorie.</div>
+                        ) : (
+                            <table className="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Bild</th>
+                                        <th className="text-center" style={{ width: '90px' }}>Aktionen</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {c.halts.map((h: any) => (
+                                        <tr key={h.id}>
+                                            <td style={{ fontWeight: '600' }}>{h.name}</td>
+                                            <td style={{ color: 'var(--text-muted)', fontSize: '12px', wordBreak: 'break-all' }}>{h.bild || '-'}</td>
+                                            <td className="text-center">
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                                    <button onClick={() => openEditHalt(h)} style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', padding: '5px' }}><Pencil size={14} /></button>
+                                                    <button onClick={() => handleDeleteHalt(h.id)} style={{ background: 'none', border: 'none', color: 'var(--color-red)', cursor: 'pointer', padding: '5px' }}><Trash2 size={15} /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+                </div>
+            ))}
 
             <Modal isOpen={qModalOpen} onClose={() => setQModalOpen(false)} title={editingQuestion ? 'Frage bearbeiten' : 'Frage hinzufügen'}>
                 {error && <div style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 'var(--radius-sm)', padding: '10px', marginBottom: '15px', color: 'var(--color-red)', fontSize: '13px' }}>{error}</div>}
@@ -292,28 +343,34 @@ export default function EditTrainingPage({ params }: { params: Promise<{ id: str
                 </form>
             </Modal>
 
-            <Modal isOpen={rModalOpen} onClose={() => setRModalOpen(false)} title={editingRoute ? 'Strecke bearbeiten' : 'Strecke hinzufügen'} maxWidth="420px">
+            <Modal isOpen={catModalOpen} onClose={() => setCatModalOpen(false)} title={editingCategory ? 'Kategorie bearbeiten' : 'Kategorie hinzufügen'} maxWidth="380px">
                 {error && <div style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 'var(--radius-sm)', padding: '10px', marginBottom: '15px', color: 'var(--color-red)', fontSize: '13px' }}>{error}</div>}
-                <form action={handleSaveRoute} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <form action={handleSaveCategory} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                        <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Streckennummer *</label>
-                        <input required name="strecke_nr" type="number" min={1} defaultValue={editingRoute?.strecke_nr || ''} style={{ padding: '8px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }} />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                        <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Halt 1</label>
-                        <input name="halt1" defaultValue={editingRoute?.halt1 || ''} style={{ padding: '8px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }} />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                        <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Halt 2</label>
-                        <input name="halt2" defaultValue={editingRoute?.halt2 || ''} style={{ padding: '8px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }} />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                        <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Halt 3</label>
-                        <input name="halt3" defaultValue={editingRoute?.halt3 || ''} style={{ padding: '8px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }} />
+                        <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Name *</label>
+                        <input required name="name" defaultValue={editingCategory?.name || ''} style={{ padding: '8px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }} />
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                        <button type="button" onClick={() => setRModalOpen(false)} style={{ padding: '8px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'transparent', color: 'white', cursor: 'pointer' }}>Abbrechen</button>
-                        <button type="submit" className="btn btn-primary">{editingRoute ? 'Speichern' : 'Hinzufügen'}</button>
+                        <button type="button" onClick={() => setCatModalOpen(false)} style={{ padding: '8px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'transparent', color: 'white', cursor: 'pointer' }}>Abbrechen</button>
+                        <button type="submit" className="btn btn-primary">{editingCategory ? 'Speichern' : 'Hinzufügen'}</button>
+                    </div>
+                </form>
+            </Modal>
+
+            <Modal isOpen={haltModalOpen} onClose={() => setHaltModalOpen(false)} title={editingHalt ? 'Standort bearbeiten' : 'Standort hinzufügen'} maxWidth="420px">
+                {error && <div style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 'var(--radius-sm)', padding: '10px', marginBottom: '15px', color: 'var(--color-red)', fontSize: '13px' }}>{error}</div>}
+                <form action={handleSaveHalt} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                        <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Name *</label>
+                        <input required name="name" defaultValue={editingHalt?.name || ''} style={{ padding: '8px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                        <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Bild-URL</label>
+                        <input name="bild" placeholder="https://..." defaultValue={editingHalt?.bild || ''} style={{ padding: '8px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                        <button type="button" onClick={() => setHaltModalOpen(false)} style={{ padding: '8px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'transparent', color: 'white', cursor: 'pointer' }}>Abbrechen</button>
+                        <button type="submit" className="btn btn-primary">{editingHalt ? 'Speichern' : 'Hinzufügen'}</button>
                     </div>
                 </form>
             </Modal>

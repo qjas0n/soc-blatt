@@ -107,33 +107,28 @@ export default async function TrainingDetailPage({ params }: { params: Promise<{
                 </div>
             </div>
 
-            {training.routes.length > 0 && (
+            {training.haltCategories.length > 0 && (
                 <div className="card">
                     <div className="card-header">
-                        <span>{training.strecken_titel || 'Strecken'}</span>
+                        <span>{training.strecken_titel || 'Standorte'}</span>
                         <MapPin size={16} className="icon" />
                     </div>
-                    <div style={{ overflow: 'auto' }}>
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th style={{ width: '80px' }}>Strecke</th>
-                                    <th>Halt 1</th>
-                                    <th>Halt 2</th>
-                                    <th>Halt 3</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {training.routes.map((r: any) => (
-                                    <tr key={r.id}>
-                                        <td style={{ fontWeight: '600', color: 'var(--color-accent)' }}>{r.strecke_nr}</td>
-                                        <td>{r.halt1}</td>
-                                        <td>{r.halt2}</td>
-                                        <td>{r.halt3}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                    <div className="card-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+                            Pro Prüfung werden aus jeder Kategorie 3 Standorte zufällig ausgewählt.
+                        </p>
+                        {training.haltCategories.map((c: any) => (
+                            <div key={c.id}>
+                                <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                                    {c.name} <span style={{ color: 'var(--text-muted)', fontWeight: '400', textTransform: 'none' }}>({c.halts.length} Standorte)</span>
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                    {c.halts.map((h: any) => (
+                                        <span key={h.id} className="badge badge-blue">{h.name}</span>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             )}

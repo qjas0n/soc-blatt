@@ -38,7 +38,7 @@ export default async function NewExamPage({ params }: { params: Promise<{ slug: 
             </div>
 
             {canConduct ? (
-                <StartExamForm trainingId={training.id} routes={training.routes} memberNames={memberNames} />
+                <StartExamForm trainingId={training.id} haltCategories={training.haltCategories} memberNames={memberNames} />
             ) : (
                 <div className="card">
                     <div className="card-content" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)', padding: '30px' }}>

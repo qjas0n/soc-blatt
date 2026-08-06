@@ -223,16 +223,27 @@ export async function getTrainingBySlug(slug: string) {
     );
     if (!rows || rows.length === 0) return null;
     const training = rows[0];
-    const [questions, routes] = await Promise.all([
+    const [questions, haltCategories] = await Promise.all([
         query('SELECT * FROM soc_training_questions WHERE training_id = ? ORDER BY sort_order ASC, id ASC', [training.id]) as Promise<any[]>,
-        query('SELECT * FROM soc_training_routes WHERE training_id = ? ORDER BY strecke_nr ASC', [training.id]) as Promise<any[]>,
+        getHaltCategoriesForTraining(training.id),
     ]);
-    return { ...training, questions, routes };
+    return { ...training, questions, haltCategories };
+}
+
+export async function getHaltCategoriesForTraining(trainingId: number) {
+    const categories = await query('SELECT * FROM soc_training_halt_categories WHERE training_id = ? ORDER BY sort_order ASC, id ASC', [trainingId]) as any[];
+    const halts = await query('SELECT * FROM soc_training_halts WHERE training_id = ? ORDER BY sort_order ASC, id ASC', [trainingId]) as any[];
+    return categories.map(c => ({ ...c, halts: halts.filter(h => h.category_id === c.id) }));
 }
 
 export async function getMemberNames(): Promise<string[]> {
     const rows = await query('SELECT display_name FROM soc_users ORDER BY display_name ASC') as any[];
     return rows.map(r => r.display_name);
+}
+
+function pickRandom<T>(arr: T[], count: number): T[] {
+    const shuffled = [...arr].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count);
 }
 
 export async function startExam(formData: FormData) {
@@ -241,8 +252,6 @@ export async function startExam(formData: FormData) {
 
     const trainingId = Number(formData.get('training_id'));
     const candidateName = (formData.get('candidate_name') as string || '').trim();
-    const streckeRaw = formData.get('strecke_nr') as string;
-    const streckeNr = streckeRaw ? Number(streckeRaw) : null;
 
     if (!candidateName) return { error: 'Name des Geprüften ist erforderlich.' };
 
@@ -262,22 +271,53 @@ export async function startExam(formData: FormData) {
     if (!trainingRows || trainingRows.length === 0) return { error: 'Ausbildung nicht gefunden.' };
     const slug = trainingRows[0].slug;
 
-    const questions = await query('SELECT id, frage, punkte FROM soc_training_questions WHERE training_id = ? ORDER BY sort_order ASC, id ASC', [trainingId]) as any[];
-    const maxPoints = questions.reduce((s, q) => s + q.punkte, 0);
+    const [allQuestions, haltCategories] = await Promise.all([
+        query('SELECT id, frage, antwort, punkte FROM soc_training_questions WHERE training_id = ? ORDER BY sort_order ASC, id ASC', [trainingId]) as Promise<any[]>,
+        getHaltCategoriesForTraining(trainingId),
+    ]);
 
+    // Trainings with Halt-Kategorien (Ortskunde-style) draw 3 random stops from each
+    // category (9 total) and 3 random questions per stop. Trainings without any
+    // categories keep the flat, full question catalog with no stops.
+    const chosenHalts: any[] = haltCategories.flatMap((c: any) => pickRandom(c.halts, Math.min(3, c.halts.length)));
+
+    let maxPoints = 0;
     const examResult: any = await query(
-        `INSERT INTO soc_training_exams (training_id, candidate_name, examiner_id, examiner_name, strecke_nr, status, notes, total_points, max_points)
-         VALUES (?, ?, ?, ?, ?, 'in_bearbeitung', '', ?, ?)`,
-        [trainingId, candidateName, session.userId, session.displayName, streckeNr, maxPoints, maxPoints]
+        `INSERT INTO soc_training_exams (training_id, candidate_name, examiner_id, examiner_name, status, notes, total_points, max_points)
+         VALUES (?, ?, ?, ?, 'in_bearbeitung', '', 0, 0)`,
+        [trainingId, candidateName, session.userId, session.displayName]
     );
     const examId = examResult.insertId;
 
-    for (const q of questions) {
-        await query(
-            'INSERT INTO soc_training_exam_answers (exam_id, question_id, frage, max_punkte, punkte_erreicht) VALUES (?, ?, ?, ?, ?)',
-            [examId, q.id, q.frage, q.punkte, q.punkte]
-        );
+    if (chosenHalts.length > 0) {
+        let sortOrder = 0;
+        for (const halt of chosenHalts) {
+            sortOrder++;
+            const haltResult: any = await query(
+                'INSERT INTO soc_training_exam_halts (exam_id, halt_id, name, bild, sort_order) VALUES (?, ?, ?, ?, ?)',
+                [examId, halt.id, halt.name, halt.bild, sortOrder]
+            );
+            const examHaltId = haltResult.insertId;
+            const haltQuestions = pickRandom(allQuestions, Math.min(3, allQuestions.length));
+            for (const q of haltQuestions) {
+                maxPoints += q.punkte;
+                await query(
+                    'INSERT INTO soc_training_exam_answers (exam_id, exam_halt_id, question_id, frage, antwort, max_punkte, punkte_erreicht) VALUES (?, ?, ?, ?, ?, ?, 0)',
+                    [examId, examHaltId, q.id, q.frage, q.antwort, q.punkte]
+                );
+            }
+        }
+    } else {
+        for (const q of allQuestions) {
+            maxPoints += q.punkte;
+            await query(
+                'INSERT INTO soc_training_exam_answers (exam_id, question_id, frage, antwort, max_punkte, punkte_erreicht) VALUES (?, ?, ?, ?, ?, 0)',
+                [examId, q.id, q.frage, q.antwort, q.punkte]
+            );
+        }
     }
+
+    await query('UPDATE soc_training_exams SET max_points = ? WHERE id = ?', [maxPoints, examId]);
 
     await addLog('Prüfung Gestartet', `${session.displayName} hat eine Prüfung für "${candidateName}" gestartet.`);
     revalidatePath(`/ausbildungen/${slug}`);
@@ -307,16 +347,30 @@ export async function updateExamAnswer(examId: number, answerId: number, punkte:
     return { success: true, total };
 }
 
+const HALT_FLAG_COLUMNS = ['gefunden', 'schnellste_route'] as const;
+
+export async function updateExamHaltFlag(examHaltId: number, field: string, value: boolean) {
+    const session = await getSession();
+    if (!session || (session.role !== 'admin' && session.role !== 'leitung')) return { error: 'Keine Berechtigung.' };
+    if (!HALT_FLAG_COLUMNS.includes(field as any)) return { error: 'Ungültiges Feld.' };
+
+    await query(`UPDATE soc_training_exam_halts SET ?? = ? WHERE id = ?`, [field, value ? 1 : 0, examHaltId]);
+    revalidatePath('/ausbildungen/pruefungen');
+    return { success: true };
+}
+
 export async function finishExam(formData: FormData) {
     const session = await getSession();
     if (!session || (session.role !== 'admin' && session.role !== 'leitung')) return { error: 'Keine Berechtigung.' };
 
     const examId = Number(formData.get('exam_id'));
-    const status = (formData.get('status') as string) || 'bestanden';
     const notes = (formData.get('notes') as string) || '';
+    const examiner2Name = (formData.get('examiner2_name') as string || '').trim();
+    const examiner3Name = (formData.get('examiner3_name') as string || '').trim();
 
     const examRows: any = await query(
-        `SELECT e.*, t.slug AS training_slug FROM soc_training_exams e JOIN soc_trainings t ON t.id = e.training_id WHERE e.id = ?`,
+        `SELECT e.*, t.slug AS training_slug, t.bestehen_prozent AS bestehen_prozent
+         FROM soc_training_exams e JOIN soc_trainings t ON t.id = e.training_id WHERE e.id = ?`,
         [examId]
     );
     if (!examRows || examRows.length === 0) return { error: 'Prüfung nicht gefunden.' };
@@ -324,9 +378,19 @@ export async function finishExam(formData: FormData) {
 
     const totalRows: any = await query('SELECT SUM(punkte_erreicht) as total FROM soc_training_exam_answers WHERE exam_id = ?', [examId]);
     const total = Number(totalRows[0]?.total || 0);
+    const maxPoints = exam.max_points || 0;
+    const pct = maxPoints > 0 ? (total / maxPoints) * 100 : 0;
+    const bestehenProzent = exam.bestehen_prozent ?? 80;
+    const status = pct >= bestehenProzent ? 'bestanden' : 'nicht_bestanden';
 
-    await query('UPDATE soc_training_exams SET status = ?, notes = ?, total_points = ? WHERE id = ?', [status, notes, total, examId]);
-    await addLog('Prüfung Abgeschlossen', `${session.displayName} hat die Prüfung von "${exam.candidate_name}" abgeschlossen (${total}/${exam.max_points} Punkte, Status: ${status}).`);
+    await query(
+        'UPDATE soc_training_exams SET status = ?, notes = ?, total_points = ?, examiner2_name = ?, examiner3_name = ? WHERE id = ?',
+        [status, notes, total, examiner2Name, examiner3Name, examId]
+    );
+    await addLog(
+        'Prüfung Abgeschlossen',
+        `${session.displayName} hat die Prüfung von "${exam.candidate_name}" abgeschlossen (${total}/${maxPoints} Punkte = ${Math.round(pct)}%, Bestehensgrenze ${bestehenProzent}%, Status: ${status}).`
+    );
 
     revalidatePath(`/ausbildungen/${exam.training_slug}`);
     revalidatePath('/ausbildungen');
@@ -378,8 +442,14 @@ export async function getExamDetail(id: number) {
     );
     if (!rows || rows.length === 0) return null;
     const exam = rows[0];
-    const answers = await query('SELECT * FROM soc_training_exam_answers WHERE exam_id = ? ORDER BY id ASC', [id]) as any[];
-    return { ...exam, answers };
+    const [answers, halts] = await Promise.all([
+        query('SELECT * FROM soc_training_exam_answers WHERE exam_id = ? ORDER BY id ASC', [id]) as Promise<any[]>,
+        query('SELECT * FROM soc_training_exam_halts WHERE exam_id = ? ORDER BY sort_order ASC, id ASC', [id]) as Promise<any[]>,
+    ]);
+
+    const haltsWithAnswers = halts.map(h => ({ ...h, answers: answers.filter(a => a.exam_halt_id === h.id) }));
+
+    return { ...exam, answers, halts: haltsWithAnswers };
 }
 
 export async function getTrainingLocks() {
@@ -503,12 +573,12 @@ export async function getTrainingForEdit(id: number) {
     const rows: any = await query('SELECT * FROM soc_trainings WHERE id = ?', [id]);
     if (!rows || rows.length === 0) return null;
     const training = rows[0];
-    const [questions, routes, categories] = await Promise.all([
+    const [questions, haltCategories, categories] = await Promise.all([
         query('SELECT * FROM soc_training_questions WHERE training_id = ? ORDER BY sort_order ASC, id ASC', [id]) as Promise<any[]>,
-        query('SELECT * FROM soc_training_routes WHERE training_id = ? ORDER BY strecke_nr ASC', [id]) as Promise<any[]>,
+        getHaltCategoriesForTraining(id),
         query('SELECT id, name FROM soc_training_categories ORDER BY sort_order ASC, id ASC') as Promise<any[]>,
     ]);
-    return { ...training, questions, routes, categories };
+    return { ...training, questions, haltCategories, categories };
 }
 
 export async function updateTraining(formData: FormData) {
@@ -597,40 +667,80 @@ export async function deleteQuestion(id: number, trainingId: number) {
     return { success: true };
 }
 
-export async function addRoute(formData: FormData) {
+export async function addHaltCategory(formData: FormData) {
     if (!(await isTrainingInstructor())) return { error: 'Keine Berechtigung.' };
     const trainingId = Number(formData.get('training_id'));
-    const streckeNr = Number(formData.get('strecke_nr'));
-    const halt1 = (formData.get('halt1') as string || '').trim();
-    const halt2 = (formData.get('halt2') as string || '').trim();
-    const halt3 = (formData.get('halt3') as string || '').trim();
+    const name = (formData.get('name') as string || '').trim();
+    if (!name) return { error: 'Name ist erforderlich.' };
 
-    if (!streckeNr) return { error: 'Streckennummer ist erforderlich.' };
+    const maxOrder: any = await query('SELECT MAX(sort_order) as m FROM soc_training_halt_categories WHERE training_id = ?', [trainingId]);
+    const sortOrder = (maxOrder[0]?.m || 0) + 1;
 
-    await query('INSERT INTO soc_training_routes (training_id, strecke_nr, halt1, halt2, halt3) VALUES (?, ?, ?, ?, ?)', [trainingId, streckeNr, halt1, halt2, halt3]);
+    await query('INSERT INTO soc_training_halt_categories (training_id, name, sort_order) VALUES (?, ?, ?)', [trainingId, name, sortOrder]);
     revalidatePath('/ausbildungen/verwaltung');
     revalidatePath(`/ausbildungen/verwaltung/${trainingId}`);
     return { success: true };
 }
 
-export async function updateRoute(formData: FormData) {
+export async function updateHaltCategory(formData: FormData) {
     if (!(await isTrainingInstructor())) return { error: 'Keine Berechtigung.' };
     const id = Number(formData.get('id'));
     const trainingId = Number(formData.get('training_id'));
-    const streckeNr = Number(formData.get('strecke_nr'));
-    const halt1 = (formData.get('halt1') as string || '').trim();
-    const halt2 = (formData.get('halt2') as string || '').trim();
-    const halt3 = (formData.get('halt3') as string || '').trim();
+    const name = (formData.get('name') as string || '').trim();
+    if (!name) return { error: 'Name ist erforderlich.' };
 
-    await query('UPDATE soc_training_routes SET strecke_nr = ?, halt1 = ?, halt2 = ?, halt3 = ? WHERE id = ?', [streckeNr, halt1, halt2, halt3, id]);
+    await query('UPDATE soc_training_halt_categories SET name = ? WHERE id = ?', [name, id]);
     revalidatePath('/ausbildungen/verwaltung');
     revalidatePath(`/ausbildungen/verwaltung/${trainingId}`);
     return { success: true };
 }
 
-export async function deleteRoute(id: number, trainingId: number) {
+export async function deleteHaltCategory(id: number, trainingId: number) {
     if (!(await isTrainingInstructor())) return { error: 'Keine Berechtigung.' };
-    await query('DELETE FROM soc_training_routes WHERE id = ?', [id]);
+    await query('DELETE FROM soc_training_halt_categories WHERE id = ?', [id]);
+    revalidatePath('/ausbildungen/verwaltung');
+    revalidatePath(`/ausbildungen/verwaltung/${trainingId}`);
+    return { success: true };
+}
+
+export async function addHalt(formData: FormData) {
+    if (!(await isTrainingInstructor())) return { error: 'Keine Berechtigung.' };
+    const trainingId = Number(formData.get('training_id'));
+    const categoryId = Number(formData.get('category_id'));
+    const name = (formData.get('name') as string || '').trim();
+    const bild = (formData.get('bild') as string || '').trim() || null;
+
+    if (!categoryId) return { error: 'Kategorie ist erforderlich.' };
+    if (!name) return { error: 'Name ist erforderlich.' };
+
+    const maxOrder: any = await query('SELECT MAX(sort_order) as m FROM soc_training_halts WHERE category_id = ?', [categoryId]);
+    const sortOrder = (maxOrder[0]?.m || 0) + 1;
+
+    await query('INSERT INTO soc_training_halts (training_id, category_id, name, bild, sort_order) VALUES (?, ?, ?, ?, ?)', [trainingId, categoryId, name, bild, sortOrder]);
+    revalidatePath('/ausbildungen/verwaltung');
+    revalidatePath(`/ausbildungen/verwaltung/${trainingId}`);
+    return { success: true };
+}
+
+export async function updateHalt(formData: FormData) {
+    if (!(await isTrainingInstructor())) return { error: 'Keine Berechtigung.' };
+    const id = Number(formData.get('id'));
+    const trainingId = Number(formData.get('training_id'));
+    const categoryId = Number(formData.get('category_id'));
+    const name = (formData.get('name') as string || '').trim();
+    const bild = (formData.get('bild') as string || '').trim() || null;
+
+    if (!name) return { error: 'Name ist erforderlich.' };
+
+    await query('UPDATE soc_training_halts SET category_id = ?, name = ?, bild = ? WHERE id = ?', [categoryId, name, bild, id]);
+    revalidatePath('/ausbildungen/verwaltung');
+    revalidatePath(`/ausbildungen/verwaltung/${trainingId}`);
+    return { success: true };
+}
+
+export async function deleteHalt(id: number, trainingId: number) {
+    if (!(await isTrainingInstructor())) return { error: 'Keine Berechtigung.' };
+    await query('DELETE FROM soc_training_halts WHERE id = ?', [id]);
     revalidatePath('/ausbildungen/verwaltung');
     revalidatePath(`/ausbildungen/verwaltung/${trainingId}`);
     return { success: true };

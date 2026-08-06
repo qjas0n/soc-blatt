@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useMemo, useTransition } from 'react';
-import { ClipboardCheck, Minus, Plus, CheckCircle2, Loader2 } from 'lucide-react';
-import { updateExamAnswer, finishExam } from '@/app/actions';
+import { Minus, Plus, Loader2 } from 'lucide-react';
+import { updateExamAnswer } from '@/app/actions';
+import FinishExamCard from '@/components/FinishExamCard';
 
 interface Answer {
     id: number;
@@ -18,10 +19,9 @@ interface Exam {
     answers: Answer[];
 }
 
-export default function LiveExamForm({ exam, bestehenProzent }: { exam: Exam; bestehenProzent: number }) {
+export default function LiveExamForm({ exam, bestehenProzent, memberNames }: { exam: Exam; bestehenProzent: number; memberNames: string[] }) {
     const [answers, setAnswers] = useState<Answer[]>(exam.answers);
     const [savingId, setSavingId] = useState<number | null>(null);
-    const [finishing, setFinishing] = useState(false);
     const [, startTransition] = useTransition();
 
     const totals = useMemo(() => {
@@ -44,12 +44,6 @@ export default function LiveExamForm({ exam, bestehenProzent }: { exam: Exam; be
         const clamped = Math.max(0, Math.min(a.max_punkte, value));
         setAnswers(prev => prev.map(x => x.id === a.id ? { ...x, punkte_erreicht: clamped } : x));
         commit(a.id, clamped);
-    };
-
-    const handleFinish = async (formData: FormData) => {
-        setFinishing(true);
-        await finishExam(formData);
-        setFinishing(false);
     };
 
     return (
@@ -113,38 +107,7 @@ export default function LiveExamForm({ exam, bestehenProzent }: { exam: Exam; be
                 </div>
             </div>
 
-            <div className="card">
-                <div className="card-header">
-                    <span>Prüfung abschließen</span>
-                    <ClipboardCheck size={16} className="icon" />
-                </div>
-                <div className="card-content">
-                    <form action={handleFinish} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        <input type="hidden" name="exam_id" value={exam.id} />
-
-                        <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-                            <div style={{ display: 'flex', flex: '1 1 200px', flexDirection: 'column', gap: '5px' }}>
-                                <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Ergebnis</label>
-                                <select name="status" defaultValue={suggestedStatus} key={suggestedStatus} style={{ padding: '9px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }}>
-                                    <option value="bestanden">Bestanden</option>
-                                    <option value="nicht_bestanden">Nicht bestanden</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                            <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Notizen (z. B. Auffälligkeiten, Verlauf des 10-80)</label>
-                            <textarea name="notes" rows={3} style={{ padding: '9px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white', fontFamily: 'inherit', resize: 'vertical' }} />
-                        </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                            <button type="submit" disabled={finishing} className="btn btn-primary" style={{ padding: '11px 24px' }}>
-                                <CheckCircle2 size={15} /> {finishing ? 'Wird abgeschlossen...' : 'Prüfung abschließen'}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
+            <FinishExamCard examId={exam.id} suggestedStatus={suggestedStatus} memberNames={memberNames} />
         </>
     );
 }

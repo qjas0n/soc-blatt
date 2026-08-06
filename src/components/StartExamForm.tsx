@@ -1,17 +1,18 @@
 "use client";
 
 import React, { useState } from 'react';
-import { AlertCircle, Play } from 'lucide-react';
+import { AlertCircle, Play, Shuffle } from 'lucide-react';
 import { startExam } from '@/app/actions';
 
-interface Route {
+interface HaltCategory {
     id: number;
-    strecke_nr: number;
+    halts: { id: number }[];
 }
 
-export default function StartExamForm({ trainingId, routes, memberNames }: {
-    trainingId: number; routes: Route[]; memberNames: string[];
+export default function StartExamForm({ trainingId, haltCategories, memberNames }: {
+    trainingId: number; haltCategories: HaltCategory[]; memberNames: string[];
 }) {
+    const totalHalts = haltCategories.reduce((s, c) => s + Math.min(3, c.halts.length), 0);
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
 
@@ -52,18 +53,14 @@ export default function StartExamForm({ trainingId, routes, memberNames }: {
                             </datalist>
                         </div>
 
-                        {routes.length > 0 && (
-                            <div style={{ display: 'flex', flex: '1 1 160px', flexDirection: 'column', gap: '5px' }}>
-                                <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Gefahrene Strecke</label>
-                                <select name="strecke_nr" style={{ padding: '9px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }}>
-                                    <option value="">Keine Angabe</option>
-                                    {routes.map(r => (
-                                        <option key={r.id} value={r.strecke_nr}>Strecke {r.strecke_nr}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        )}
                     </div>
+
+                    {haltCategories.length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                            <Shuffle size={13} />
+                            Standorte und Theoriefragen werden beim Start zufällig ausgewählt ({totalHalts} Standorte aus {haltCategories.length} Kategorien).
+                        </div>
+                    )}
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                         <button type="submit" disabled={saving} className="btn btn-primary" style={{ padding: '11px 24px' }}>

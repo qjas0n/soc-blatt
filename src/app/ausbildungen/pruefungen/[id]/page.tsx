@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ChevronRight, ClipboardCheck, Lock, User, Calendar, MapPin, Radio } from 'lucide-react';
+import { ChevronRight, ClipboardCheck, Lock, User, Calendar, MapPin, Radio, CheckCircle2, XCircle } from 'lucide-react';
 import { getExamDetail, isTrainingInstructor } from '@/app/actions';
 import DeleteExamButton from '@/components/DeleteExamButton';
 
@@ -75,16 +75,22 @@ export default async function ExamDetailPage({ params }: { params: Promise<{ id:
                 <div className="stat-card">
                     <div className="stat-header"><User size={16} /> Prüfer</div>
                     <div className="stat-value" style={{ fontSize: '18px' }}>{exam.examiner_name}</div>
+                    {(exam.examiner2_name || exam.examiner3_name) && (
+                        <div className="stat-sub">
+                            {[exam.examiner2_name, exam.examiner3_name].filter(Boolean).join(', ')}
+                        </div>
+                    )}
                 </div>
                 <div className="stat-card">
                     <div className="stat-header"><Calendar size={16} /> Datum</div>
                     <div className="stat-value" style={{ fontSize: '18px' }}>{date.toLocaleDateString('de-DE')}</div>
                     <div className="stat-sub">{date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr</div>
                 </div>
-                {exam.strecke_nr && (
+                {exam.halts.length > 0 && (
                     <div className="stat-card">
-                        <div className="stat-header"><MapPin size={16} /> Strecke</div>
-                        <div className="stat-value" style={{ fontSize: '18px' }}>Strecke {exam.strecke_nr}</div>
+                        <div className="stat-header"><MapPin size={16} /> Standorte</div>
+                        <div className="stat-value" style={{ fontSize: '18px' }}>{exam.halts.length}</div>
+                        <div className="stat-sub">{exam.halts.filter((h: any) => h.gefunden).length} gefunden</div>
                     </div>
                 )}
                 <div className="stat-card">
@@ -105,7 +111,45 @@ export default async function ExamDetailPage({ params }: { params: Promise<{ id:
                 </div>
             )}
 
-            {exam.answers.length > 0 && (
+            {exam.halts.length > 0 ? (
+                exam.halts.map((h: any, i: number) => (
+                    <div className="card" key={h.id}>
+                        <div className="card-header">
+                            <span>Standort {i + 1}: {h.name}</span>
+                            <div style={{ display: 'flex', gap: '10px', fontSize: '11px' }}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: h.gefunden ? 'var(--color-green)' : 'var(--text-muted)' }}>
+                                    {h.gefunden ? <CheckCircle2 size={13} /> : <XCircle size={13} />} Gefunden
+                                </span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: h.schnellste_route ? 'var(--color-green)' : 'var(--text-muted)' }}>
+                                    {h.schnellste_route ? <CheckCircle2 size={13} /> : <XCircle size={13} />} Schnellste Route
+                                </span>
+                            </div>
+                        </div>
+                        {h.answers.length > 0 && (
+                            <div style={{ overflow: 'auto' }}>
+                                <table className="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Frage</th>
+                                            <th className="text-center" style={{ width: '110px' }}>Punkte</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {h.answers.map((a: any) => (
+                                            <tr key={a.id}>
+                                                <td>{a.frage}</td>
+                                                <td className="text-center" style={{ color: a.punkte_erreicht === a.max_punkte ? 'var(--color-green)' : a.punkte_erreicht === 0 ? 'var(--color-red)' : 'var(--color-yellow)', fontWeight: '600' }}>
+                                                    {a.punkte_erreicht} / {a.max_punkte}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                ))
+            ) : exam.answers.length > 0 && (
                 <div className="card">
                     <div className="card-header"><span>Bewertung im Detail</span></div>
                     <div style={{ overflow: 'auto' }}>

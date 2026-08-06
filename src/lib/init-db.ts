@@ -99,14 +99,23 @@ export async function initDb() {
       FOREIGN KEY (training_id) REFERENCES soc_trainings(id) ON DELETE CASCADE
     )`,
 
-    `CREATE TABLE IF NOT EXISTS soc_training_routes (
+    `CREATE TABLE IF NOT EXISTS soc_training_halt_categories (
       id INT AUTO_INCREMENT PRIMARY KEY,
       training_id INT NOT NULL,
-      strecke_nr INT NOT NULL,
-      halt1 VARCHAR(255) DEFAULT '',
-      halt2 VARCHAR(255) DEFAULT '',
-      halt3 VARCHAR(255) DEFAULT '',
+      name VARCHAR(255) NOT NULL,
+      sort_order INT DEFAULT 0,
       FOREIGN KEY (training_id) REFERENCES soc_trainings(id) ON DELETE CASCADE
+    )`,
+
+    `CREATE TABLE IF NOT EXISTS soc_training_halts (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      training_id INT NOT NULL,
+      category_id INT NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      bild VARCHAR(500) DEFAULT NULL,
+      sort_order INT DEFAULT 0,
+      FOREIGN KEY (training_id) REFERENCES soc_trainings(id) ON DELETE CASCADE,
+      FOREIGN KEY (category_id) REFERENCES soc_training_halt_categories(id) ON DELETE CASCADE
     )`,
 
     `CREATE TABLE IF NOT EXISTS soc_training_exams (
@@ -115,7 +124,8 @@ export async function initDb() {
       candidate_name VARCHAR(255) NOT NULL,
       examiner_id INT DEFAULT NULL,
       examiner_name VARCHAR(255) NOT NULL,
-      strecke_nr INT DEFAULT NULL,
+      examiner2_name VARCHAR(255) DEFAULT '',
+      examiner3_name VARCHAR(255) DEFAULT '',
       status VARCHAR(30) DEFAULT 'in_bearbeitung',
       notes TEXT DEFAULT '',
       total_points INT DEFAULT 0,
@@ -125,14 +135,30 @@ export async function initDb() {
       FOREIGN KEY (examiner_id) REFERENCES soc_users(id) ON DELETE SET NULL
     )`,
 
+    `CREATE TABLE IF NOT EXISTS soc_training_exam_halts (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      exam_id INT NOT NULL,
+      halt_id INT DEFAULT NULL,
+      name VARCHAR(255) NOT NULL,
+      bild VARCHAR(500) DEFAULT NULL,
+      gefunden TINYINT DEFAULT 0,
+      schnellste_route TINYINT DEFAULT 0,
+      sort_order INT DEFAULT 0,
+      FOREIGN KEY (exam_id) REFERENCES soc_training_exams(id) ON DELETE CASCADE,
+      FOREIGN KEY (halt_id) REFERENCES soc_training_halts(id) ON DELETE SET NULL
+    )`,
+
     `CREATE TABLE IF NOT EXISTS soc_training_exam_answers (
       id INT AUTO_INCREMENT PRIMARY KEY,
       exam_id INT NOT NULL,
+      exam_halt_id INT DEFAULT NULL,
       question_id INT DEFAULT NULL,
       frage TEXT NOT NULL,
+      antwort TEXT DEFAULT '',
       max_punkte INT DEFAULT 1,
       punkte_erreicht INT DEFAULT 0,
       FOREIGN KEY (exam_id) REFERENCES soc_training_exams(id) ON DELETE CASCADE,
+      FOREIGN KEY (exam_halt_id) REFERENCES soc_training_exam_halts(id) ON DELETE CASCADE,
       FOREIGN KEY (question_id) REFERENCES soc_training_questions(id) ON DELETE SET NULL
     )`,
 
@@ -191,6 +217,30 @@ export async function initDb() {
       await query("UPDATE soc_trainings SET aufgaben_titel = 'Bewertungskriterien' WHERE slug = 'schiessen-praxis' AND aufgaben_titel = 'Fragen / Aufgaben'");
     } catch { /* ignore */ }
 
+    try {
+      await query("ALTER TABLE soc_training_exam_answers ADD COLUMN antwort TEXT DEFAULT ''");
+    } catch { /* column already exists */ }
+
+    for (const col of ['examiner2_name', 'examiner3_name']) {
+      try {
+        await query(`ALTER TABLE soc_training_exams ADD COLUMN ${col} VARCHAR(255) DEFAULT ''`);
+      } catch { /* column already exists */ }
+    }
+
+    try {
+      await query('ALTER TABLE soc_training_exam_answers ADD COLUMN exam_halt_id INT DEFAULT NULL');
+    } catch { /* column already exists */ }
+
+    // Superseded by soc_training_halt_categories / soc_training_halts / soc_training_exam_halts —
+    // drop the old fixed-3-stop columns and route table from an earlier schema version.
+    for (const col of ['strecke_nr', 'halt1_gefunden', 'halt1_schnellste', 'halt2_gefunden', 'halt2_schnellste', 'halt3_gefunden', 'halt3_schnellste']) {
+      try {
+        await query(`ALTER TABLE soc_training_exams DROP COLUMN ${col}`);
+      } catch { /* column doesn't exist */ }
+    }
+
+    await migrateRoutesToHaltCategories();
+
     const existing: any = await query('SELECT id FROM soc_users WHERE username = ?', ['admin']);
     if (!existing || existing.length === 0) {
       const { hashPassword } = await import('./auth');
@@ -209,6 +259,50 @@ export async function initDb() {
   } catch (error) {
     console.error('Failed to initialize tables:', error);
   }
+}
+
+// Migrates the old fixed-3-stop "soc_training_routes" table (Strecke -> Halt1/2/3) from an
+// earlier schema version into the new soc_training_halt_categories / soc_training_halts
+// structure: each stop position becomes its own category ("Kategorie 1/2/3"), preserving
+// every previously seeded location name and image. Then drops the now-unused route table.
+async function migrateRoutesToHaltCategories() {
+  let routes: any;
+  try {
+    routes = await query('SELECT * FROM soc_training_routes');
+  } catch {
+    return; // table doesn't exist — fresh install, nothing to migrate
+  }
+  if (!routes || routes.length === 0) {
+    try { await query('DROP TABLE IF EXISTS soc_training_routes'); } catch { /* ignore */ }
+    return;
+  }
+
+  const trainingIds = [...new Set(routes.map((r: any) => r.training_id))] as number[];
+  for (const trainingId of trainingIds) {
+    const existingCats: any = await query('SELECT id FROM soc_training_halt_categories WHERE training_id = ?', [trainingId]);
+    if (existingCats && existingCats.length > 0) continue;
+
+    const categoryIds: number[] = [];
+    for (let i = 1; i <= 3; i++) {
+      const catResult: any = await query(
+        'INSERT INTO soc_training_halt_categories (training_id, name, sort_order) VALUES (?, ?, ?)',
+        [trainingId, `Kategorie ${i}`, i]
+      );
+      categoryIds.push(catResult.insertId);
+    }
+
+    const trainingRoutes = routes.filter((r: any) => r.training_id === trainingId);
+    let sortOrder = 0;
+    for (const r of trainingRoutes) {
+      sortOrder++;
+      await query('INSERT INTO soc_training_halts (training_id, category_id, name, bild, sort_order) VALUES (?, ?, ?, ?, ?)', [trainingId, categoryIds[0], r.halt1, r.halt1_bild, sortOrder]);
+      await query('INSERT INTO soc_training_halts (training_id, category_id, name, bild, sort_order) VALUES (?, ?, ?, ?, ?)', [trainingId, categoryIds[1], r.halt2, r.halt2_bild, sortOrder]);
+      await query('INSERT INTO soc_training_halts (training_id, category_id, name, bild, sort_order) VALUES (?, ?, ?, ?, ?)', [trainingId, categoryIds[2], r.halt3, r.halt3_bild, sortOrder]);
+    }
+    console.log(`Migrated ${trainingRoutes.length} Strecken zu 3 Halt-Kategorien für Training ID ${trainingId}.`);
+  }
+
+  try { await query('DROP TABLE IF EXISTS soc_training_routes'); } catch { /* ignore */ }
 }
 
 async function seedTrainings() {
@@ -263,18 +357,25 @@ async function seedTrainings() {
     );
   }
 
-  const routes: [number, string, string, string][] = [
-    [1, 'Wellendach', 'Papierfabrik', 'Taxi Zentrale'],
-    [2, 'Vinewood Fernseher', 'Arcadius Tower', 'Schleife'],
-    [3, 'Altes Bennys', 'LCN Preset Kreuzung', 'Vinewood Plaza'],
-    [4, 'ICA Tower', 'Alte SWAT Garage', 'Fleischerei'],
-    [5, 'Gerichtsgebäude', 'Little Tokyo', 'Altes DPOS'],
+  // 3 Halt-Kategorien mit je 5 möglichen Standorten. Pro Prüfung werden später 3 Halte je
+  // Kategorie zufällig gezogen (9 Standorte insgesamt).
+  const haltGroups: string[][] = [
+    ['Wellendach', 'Vinewood Fernseher', 'Altes Bennys', 'ICA Tower', 'Gerichtsgebäude'],
+    ['Papierfabrik', 'Arcadius Tower', 'LCN Preset Kreuzung', 'Alte SWAT Garage', 'Little Tokyo'],
+    ['Taxi Zentrale', 'Schleife', 'Vinewood Plaza', 'Fleischerei', 'Altes DPOS'],
   ];
-  for (const [strecke, h1, h2, h3] of routes) {
-    await query(
-      'INSERT INTO soc_training_routes (training_id, strecke_nr, halt1, halt2, halt3) VALUES (?, ?, ?, ?, ?)',
-      [fahrenId, strecke, h1, h2, h3]
+  for (let g = 0; g < haltGroups.length; g++) {
+    const catResult: any = await query(
+      'INSERT INTO soc_training_halt_categories (training_id, name, sort_order) VALUES (?, ?, ?)',
+      [fahrenId, `Kategorie ${g + 1}`, g + 1]
     );
+    const categoryId = catResult.insertId;
+    for (let i = 0; i < haltGroups[g].length; i++) {
+      await query(
+        'INSERT INTO soc_training_halts (training_id, category_id, name, sort_order) VALUES (?, ?, ?, ?)',
+        [fahrenId, categoryId, haltGroups[g][i], i + 1]
+      );
+    }
   }
 
   await query(
